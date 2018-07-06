@@ -4,4 +4,4 @@
   ((name ocps2)
    (public_name ocps2)
    (preprocess (pps (ppx_deriving.std)))
-   (libraries ())))
+   (libraries (containers stdint))))
