@@ -1,0 +1,23 @@
+opam-version: "1.2"
+name: "ocps2"
+version: "20180706"
+maintainer: "Dan Ravensloft <dan.ravensloft@gmail.com>"
+authors: "Dan Ravensloft <dan.ravensloft@gmail.com>"
+homepage: "https://github.com/ZirconiumX/ocps2"
+bug-reports: "https://github.com/ZirconiumX/ocps2"
+license: "MIT"
+dev-repo: "https://github.com/ZirconiumX/ocps2"
+build: [
+  ["jbuilder" "build" "-p" name "-j" jobs]
+]
+install: [
+  ["jbuilder" "install" "--prefix=%{prefix}%"]
+]
+depends: [
+  "jbuilder" {build}
+  "ppx_deriving"
+  "stdint"
+]
+descr: "
+PlayStation 2 emulator
+"
