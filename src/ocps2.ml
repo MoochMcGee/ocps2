@@ -1,3 +1,5 @@
+open Memory
+
 let test_add () =
     (* add $t3, $t1, $t2 *)
     let add = "\x20\x58\x2a\x01" in
