@@ -148,13 +148,24 @@ type inst_i = {
     imm   : int;
 } [@@deriving show]
 
+(* jump
+ * OP label
+ * encoded as
+ * 31   25            0
+ * | op | destination |
+ *)
+type inst_j = {
+    op    : opcode;
+    dest  : int;
+} [@@deriving show]
+
 (** A MIPS instruction.
  * Decoding is broken down by instruction format.
  *)
 type t =
     | Inst_R of inst_r
     | Inst_I of inst_i
-    (*| Inst_J of inst_j*)
+    | Inst_J of inst_j
     | NYI
     [@@deriving show]
 

@@ -146,6 +146,17 @@ type inst_i = {
     imm   : int;
 } [@@deriving show]
 
+(* jump
+ * OP label
+ * encoded as
+ * 31   25            0
+ * | op | destination |
+ *)
+type inst_j = {
+    op    : opcode;
+    dest  : int;
+} [@@deriving show]
+
 type opcode_type =
     | Optype_R  (* integer: register and register to register *)
     | Optype_I  (* integer: register and immediate to register *)
@@ -158,7 +169,7 @@ type opcode_type =
 type t =
     | Inst_R of inst_r
     | Inst_I of inst_i
-    (*| Inst_J of inst_j*)
+    | Inst_J of inst_j
     | NYI
     [@@deriving show]
 
@@ -232,6 +243,25 @@ let decode_i inst =
     | None ->
         failwith "Illegal instruction: unrecognised opcode in I-type instruction"
 
+let decode_j inst =
+    let open Stdint.Uint32 in
+    let (land) = logand in
+    let twentysixbits = of_int 0x02FFFFFF in
+    (* The following should never fail *)
+    let dest = inst land twentysixbits |> to_int in
+    (* But this could. *)
+    match get_op inst with
+    | Some op ->
+        begin match op with
+        | Mips_J | Mips_JAL -> 
+            Inst_J { op; dest }
+        (* This could be a bug if we reach this. *)
+        | _ ->
+            failwith "Illegal instruction: invalid opcode in J-type instruction"
+        end
+    | None ->
+        failwith "Illegal instruction: unrecognised opcode in J-type instruction"
+
 let decode s =
     assert (Bytes.length s = 4);
     let open Stdint.Uint32 in
@@ -241,7 +271,7 @@ let decode s =
         begin match optype with
         | Optype_R -> decode_r inst
         | Optype_I -> decode_i inst
-      (*| Optype_J -> decode_j inst*)
-        | _ -> failwith "Opcodes with formats other than R are not yet implemented"
+        | Optype_J -> decode_j inst
+        (*| _ -> failwith "Opcodes with formats other than R, I and J are not yet implemented"*)
         end
     | None -> failwith "Illegal instruction"
