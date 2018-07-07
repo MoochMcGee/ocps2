@@ -1,11 +1,11 @@
 (** A MIPS register *)
 type register =
-    | R0 (* always zero *)
-    | R1  | R2  | R3  | R4  | R5  | R6  | R7
-    | R8  | R9  | R10 | R11 | R12 | R13 | R14 | R15
-    | R16 | R17 | R18 | R19 | R20 | R21 | R22 | R23
-    | R24 | R25 | R26 | R27 | R28 | R29 | R30 | R31
-    [@@deriving enum]
+    | R_zero (* always zero *)
+    | R_at | R_v0 | R_v1 | R_a0 | R_a1 | R_a2 | R_a3
+    | R_t0 | R_t1 | R_t2 | R_t3 | R_t4 | R_t5 | R_t6 | R_t7
+    | R_s0 | R_s1 | R_s2 | R_s3 | R_s4 | R_s5 | R_s6 | R_s7
+    | R_t8 | R_t9 | R_k0 | R_k1 | R_gp | R_sp | R_fp | R_ra
+    [@@deriving enum, show]
 
 (** A MIPS opcode mnemonic *)
 type opcode =
@@ -39,7 +39,7 @@ type opcode =
     | Mips_SH    (* Store Halfword *)
     (* 0x2A is unused *)
     | Mips_SW    (* Store Word *) [@value 0x2B]
-    [@@deriving enum]
+    [@@deriving enum, show]
 
 (* ALU function field; only on R type instructions *)
 type funct =
@@ -117,7 +117,7 @@ type funct =
     | Funct_DSRL32  (* 64-bit logical shift right plus 32 *)
     | Funct_DSRA32  (* 64-bit arithmetic shift right plus 32 *)
     *)
-    [@@deriving enum]
+    [@@deriving enum, show]
 
 (* integer: register and register to register
  * OP rd, rs, rt
@@ -132,22 +132,31 @@ type inst_r = {
     rd    : register;
     shamt : int;
     funct : funct;
-}
+} [@@deriving show]
 
-type opcode_type =
-    | Optype_R  (* integer: register and register to register *)
-    | Optype_I  (* integer: register and immediate to register *)
-    | Optype_J  (* jump *)
-    (* Not yet implemented:
-    | Optype_FR (* float: register and register to register *)
-    | Optype_FI (* float: register and immediate to register *)
-    *)
+(* integer: register and immediate to register
+ * OP rt, IMM(rs)
+ * OP rs, rt, IMM (beq/bne)
+ * encoded as
+ * 31   25             20              15          0
+ * | op | first source | second source | immediate |
+ *)
+type inst_i = {
+    op    : opcode;
+    rs    : register;
+    rt    : register;
+    imm   : int;
+} [@@deriving show]
 
+(** A MIPS instruction.
+ * Decoding is broken down by instruction format.
+ *)
 type t =
     | Inst_R of inst_r
-    (*| Inst_I of inst_i*)
+    | Inst_I of inst_i
     (*| Inst_J of inst_j*)
     | NYI
+    [@@deriving show]
 
 (** Decode a MIPS instruction *)
 val decode : Bytes.t -> t

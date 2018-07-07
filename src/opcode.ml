@@ -1,10 +1,10 @@
 type register =
-    | R0 (* always zero *)
-    | R1  | R2  | R3  | R4  | R5  | R6  | R7
-    | R8  | R9  | R10 | R11 | R12 | R13 | R14 | R15
-    | R16 | R17 | R18 | R19 | R20 | R21 | R22 | R23
-    | R24 | R25 | R26 | R27 | R28 | R29 | R30 | R31
-    [@@deriving enum]
+    | R_zero (* always zero *)
+    | R_at | R_v0 | R_v1 | R_a0 | R_a1 | R_a2 | R_a3
+    | R_t0 | R_t1 | R_t2 | R_t3 | R_t4 | R_t5 | R_t6 | R_t7
+    | R_s0 | R_s1 | R_s2 | R_s3 | R_s4 | R_s5 | R_s6 | R_s7
+    | R_t8 | R_t9 | R_k0 | R_k1 | R_gp | R_sp | R_fp | R_ra
+    [@@deriving enum, show]
 
 type opcode =
     (* 0x00 *)
@@ -37,7 +37,7 @@ type opcode =
     | Mips_SH    (* Store Halfword *)
     (* 0x2A is unused *)
     | Mips_SW    (* Store Word *) [@value 0x2B]
-    [@@deriving enum]
+    [@@deriving enum, show]
 
 (* ALU function field; only on R type instructions *)
 type funct =
@@ -115,7 +115,7 @@ type funct =
     | Funct_DSRL32  (* 64-bit logical shift right plus 32 *)
     | Funct_DSRA32  (* 64-bit arithmetic shift right plus 32 *)
     *)
-    [@@deriving enum]
+    [@@deriving enum, show]
 
 (* integer: register and register to register
  * OP rd, rs, rt
@@ -130,7 +130,21 @@ type inst_r = {
     rd    : register;
     shamt : int;
     funct : funct;
-}
+} [@@deriving show]
+
+(* integer: register and immediate to register
+ * OP rt, IMM(rs)
+ * OP rs, rt, IMM (beq/bne)
+ * encoded as
+ * 31   25             20              15          0
+ * | op | first source | second source | immediate |
+ *)
+type inst_i = {
+    op    : opcode;
+    rs    : register;
+    rt    : register;
+    imm   : int;
+} [@@deriving show]
 
 type opcode_type =
     | Optype_R  (* integer: register and register to register *)
@@ -143,9 +157,10 @@ type opcode_type =
 
 type t =
     | Inst_R of inst_r
-    (*| Inst_I of inst_i*)
+    | Inst_I of inst_i
     (*| Inst_J of inst_j*)
     | NYI
+    [@@deriving show]
 
 let type_of_opcode = function
     | Mips_ALU  | Mips_MFC0 -> Some Optype_R
@@ -155,34 +170,78 @@ let type_of_opcode = function
     | Mips_LW   | Mips_LBU   | Mips_LHU  | Mips_SB   | Mips_SH
     | Mips_SW  -> Some Optype_I
 
+let get_op inst =
+    let open Stdint.Uint32 in
+    let (>>) = shift_right_logical in
+    inst >> 26 |> to_int |> opcode_of_enum 
+
+let extract_register ~shift inst =
+    let open Stdint.Uint32 in
+    let (>>) = shift_right_logical in
+    let (land) = logand in
+    let fivebits = of_int 0x1F in
+    (inst >> shift) land fivebits |> to_int |> register_of_enum |> CCOpt.get_or ~default:R_zero
+
+let get_rs =
+    extract_register ~shift:21
+
+let get_rt =
+    extract_register ~shift:16
+
 let decode_r inst =
     let open Stdint.Uint32 in
     let (>>) = shift_right_logical in
     let (land) = logand in
     let fivebits = of_int 0x1F in
     let sixbits = of_int 0x3F in
+    (* Should this throw illegal instruction? *)
     let funct = inst land sixbits |> to_int |> funct_of_enum |> CCOpt.get_or ~default:Funct_SLL in
     let shamt = (inst >> 6) land fivebits |> to_int in
     (* The following should never fail *)
-    let rd = (inst >> 11) land fivebits |> to_int |> register_of_enum |> CCOpt.get_or ~default:R0 in
-    let rt = (inst >> 16) land fivebits |> to_int |> register_of_enum |> CCOpt.get_or ~default:R0 in
-    let rs = (inst >> 21) land fivebits |> to_int |> register_of_enum |> CCOpt.get_or ~default:R0 in
+    let rd = extract_register ~shift:11 inst in
+    let rt = get_rt inst in 
+    let rs = get_rs inst in
     (* But this could. *)
-    match inst >> 26 |> to_int |> opcode_of_enum with
-    | Some op -> Inst_R { op; rs; rt; rd; shamt; funct }
-    | None -> failwith "Illegal instruction"
+    match get_op inst with
+    | Some Mips_ALU -> Inst_R { op = Mips_ALU; rs; rt; rd; shamt; funct }
+    (* This could be a bug if we reach this. *)
+    | None -> failwith "Illegal instruction: unrecognised opcode in R-type instruction"
+    | Some op -> failwith "Illegal instruction: R-type opcodes only use the ALU op"
+
+let decode_i inst =
+    let open Stdint.Uint32 in
+    let (land) = logand in
+    let twobytes = of_int 0xFFFF in
+    (* The following should never fail *)
+    let imm = inst land twobytes |> to_int in
+    let rt = get_rt inst in
+    let rs = get_rs inst in
+    (* But this could. *)
+    match get_op inst with
+    | Some op ->
+        begin match op with
+        | Mips_BEQ  | Mips_BNE   | Mips_BLEZ | Mips_ADDI | Mips_ADDIU
+        | Mips_SLTI | Mips_SLTIU | Mips_ANDI | Mips_ORI  | Mips_LUI
+        | Mips_LW   | Mips_LBU   | Mips_LHU  | Mips_SB   | Mips_SH
+        | Mips_SW ->
+            Inst_I { op; rs; rt; imm }
+        (* This could be a bug if we reach this. *)
+        | _ ->
+            failwith "Illegal instruction: invalid opcode in I-type instruction"
+        end
+    | None ->
+        failwith "Illegal instruction: unrecognised opcode in I-type instruction"
 
 let decode s =
     assert (Bytes.length s = 4);
     let open Stdint.Uint32 in
     let inst = of_bytes_little_endian s 0 in
-    let op = shift_right_logical inst 26 in
-    match CCOpt.(op |> to_int |> opcode_of_enum >>= type_of_opcode) with
+    match CCOpt.(get_op inst >>= type_of_opcode) with
     | Some optype ->
         begin match optype with
         | Optype_R -> decode_r inst
-      (*| Optype_I -> Opcode_i.decode inst*)
-      (*| Optype_J -> Opcode_j.decode inst*)
+        | Optype_I -> decode_i inst
+      (*| Optype_J -> decode_j inst*)
         | _ -> failwith "Opcodes with formats other than R are not yet implemented"
         end
     | None -> failwith "Illegal instruction"
