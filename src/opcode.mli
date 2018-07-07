@@ -170,4 +170,4 @@ type t =
     [@@deriving show]
 
 (** Decode a MIPS instruction *)
-val decode : Bytes.t -> t
+val decode : Stdint.Uint32.t -> t

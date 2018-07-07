@@ -262,10 +262,8 @@ let decode_j inst =
     | None ->
         failwith "Illegal instruction: unrecognised opcode in J-type instruction"
 
-let decode s =
-    assert (Bytes.length s = 4);
+let decode inst =
     let open Stdint.Uint32 in
-    let inst = of_bytes_little_endian s 0 in
     match CCOpt.(get_op inst >>= type_of_opcode) with
     | Some optype ->
         begin match optype with

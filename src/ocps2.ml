@@ -1,9 +1,10 @@
 open Memory
+open Stdint
 
 let test_add () =
     (* add $t3, $t1, $t2 *)
-    let add = "\x20\x58\x2a\x01" in
-    let op = Bytes.of_string add |> Opcode.decode in
+    let add = Uint32.of_string "0x012a5820" in
+    let op = add |> Opcode.decode in
     Printf.printf "Insn: %s\n" (Opcode.show op);
     match op with
     | Opcode.Inst_R op ->
@@ -28,8 +29,8 @@ let test_add () =
 
 let test_addi () =
     (* addi $t1, 10($zero) *)
-    let addi = "\x0a\x00\x09\x20" in
-    let op = Bytes.of_string addi |> Opcode.decode in
+    let addi = Uint32.of_string "0x2009000a" in
+    let op = addi |> Opcode.decode in
     Printf.printf "Insn: %s\n" (Opcode.show op);
     match op with
     | Opcode.Inst_I op ->
@@ -52,6 +53,13 @@ let test_addi () =
         end
     | _ -> failwith "instruction format is wrong"
 
+let test_mult () =
+    (* mult $t0, $t1 *)
+    let mult = Uint32.of_string "0x012a0018" in
+    let op = mult |> Opcode.decode in
+    Printf.printf "Insn: %s\n" (Opcode.show op)
+
 let () =
     test_add ();
-    test_addi ()
+    test_addi ();
+    test_mult ()
