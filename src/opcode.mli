@@ -9,36 +9,67 @@ type register =
 
 (** A MIPS opcode mnemonic *)
 type opcode =
-    (* 0x00 *)
     | Mips_ALU   (* MIPS splits arithmetic instructions into an ALU block
                   * then uses the `function` section at the end of the
                   * instruction to disambiguate.
                   *)
-    (* 0x01 is unused *)
+    | Mips_REGIM (* Likewise, register/immediate compare and branch instructions
+                  * have their own unique block.
+                  *)
     | Mips_J     (* Jump *) [@value 0x02]
     | Mips_JAL   (* Jump and Link *)
     | Mips_BEQ   (* Branch if Equal *)
     | Mips_BNE   (* Branch if Not Equal *)
     | Mips_BLEZ  (* Branch if Less Than or Equal to Zero *)
-    (* 0x07 is unused *)
-    | Mips_ADDI  (* Add Immediate *) [@value 0x08]
+    | Mips_BGTZ  (* Branch is Greater Than or Equal to Zero *)
+    | Mips_ADDI  (* Add Immediate *)
     | Mips_ADDIU (* Add Unsigned Immediate *)
     | Mips_SLTI  (* Set to 1 if Less Than Immediate *)
     | Mips_SLTIU (* Set to 1 if Less Than Unsigned Immediate *)
     | Mips_ANDI  (* Bitwise AND Immediate *)
     | Mips_ORI   (* Bitwise OR Immediate *)
-    (* 0x0E is unused *)
-    | Mips_LUI   (* Load Upper Immediate *) [@value 0x0F]
+    | Mips_XORI  (* Bitwise exclusive-OR Immediate *)
+    | Mips_LUI   (* Load Upper Immediate *)
     | Mips_MFC0  (* Move from Coprocessor 0 *)
-    (* 0x11 - 0x22 are unused *)
-    | Mips_LW    (* Load Word *) [@value 0x23]
+    (* 0x11 - 0x13 are coprocessor operations *)
+    (* MIPS II likely branches - TODO
+    | Mips_BEQL  (* Branch if Equal (likely) *)
+    | Mips_BNEL  (* Branch if Not Equal (likely) *)
+    | Mips_BLEZL (* Branch if Less Than or Equal to Zero (likely) *)
+    | Mips_BGTZL (* Branch if Greater Than or Equal to Zero (likely) *)
+    *)
+    (* MIPS III 64-bit arithmetic - TODO
+    | Mips_LDL   (* Load Doubleword Left *)
+    | Mips_LDR   (* Load Doubleword Right *)
+    *)
+    | Mips_LB    (* Load Byte *) [@value 0x20]
+    | Mips_LH    (* Load Halfword *)
+    | Mips_LWL   (* Load Word Left *)
+    | Mips_LW    (* Load Word *)
     | Mips_LBU   (* Load Byte Unsigned *)
     | Mips_LHU   (* Load Halfword Unsigned *)
-    (* 0x26 - 0x27 are unused *)
-    | Mips_SB    (* Store Byte *) [@value 0x28]
+    | Mips_LWR   (* Load Word Right *)
+    | Mips_LWU   (* Load Word Unsigned *)
+    | Mips_SB    (* Store Byte *)
     | Mips_SH    (* Store Halfword *)
-    (* 0x2A is unused *)
-    | Mips_SW    (* Store Word *) [@value 0x2B]
+    | Mips_SWL   (* Store Word Left *)
+    | Mips_SW    (* Store Word *)
+    (* MIPS III 64-bit arithmetic - TODO
+    | Mips_SDL   (* Store Doubleword Left *)
+    | Mips_SDR   (* Store Doubleword Right *)
+    *)
+    | Mips_SWR   (* Store Word Right *) [@value 0x2E]
+    (* 0x2F is CACHE *)
+    | Mips_LL    (* Load Linked *) [@value 0x30]
+    (* 0x31-0x36 are unused *)
+    (* MIPS III 64-bit arithmetic - TODO
+    | Mips_LD    (* Load Doubleword *)
+    *)
+    | Mips_SC    (* Store Conditional *) [@value 0x38]
+    (* 0x39-0x3E are unused *)
+    (* MIPS III 64-bit arithmetic - TODO
+    | Mips_SD    (* Store Doubleword *) [@value 0x3F]
+    *)
     [@@deriving enum, show]
 
 (* ALU function field; only on R type instructions *)
@@ -65,7 +96,7 @@ type funct =
     | Funct_MTHI    (* Move to HI *)
     | Funct_MFLO    (* Move from LO *)
     | Funct_MTLO    (* Move to LO *)
-    (* MIPS III - TODO
+    (* MIPS III 64-bit arithmetic - TODO
     | Funct_DSLLV   (* 64-bit shift-left logical by variable *)
     (* 0x15 is unused *)
     | Funct_DSRLV   (* 64-bit shift-right logical by variable *) [@value 0x16]
@@ -119,11 +150,39 @@ type funct =
     *)
     [@@deriving enum, show]
 
+(* Branch types for RI instructions *)
+type branch =
+    | Branch_BLTZ   (* Branch if less than zero *)
+    | Branch_BGEZ   (* Branch if greater than zero *)
+    (* MIPS II likely branches - TODO
+    | Branch_BLTZL  (* Branch if less than zero (likely) *)
+    | Branch_BGEZL  (* Branch if greater than zero (likely) *)
+    *)
+    (* 0x4-0x7 are unused *)
+    (* MIPS II conditional traps - TODO
+    | Branch_TGEI   (* Trap if greater than immediate *)
+    | Branch_TGEIU  (* Trap if greater than immediate (unsigned) *)
+    | Branch_TLTI   (* Trap if less than immediate *)
+    | Branch_TLTIU  (* Trap if less than immediate (unsigned) *)
+    | Branch_TEQI   (* Trap if equal to immediate *)
+    | Branch_TNEI   (* Trap if not equal to immediate *)
+    *)
+    (* 0xF is unused *)
+    | Branch_BLTZAL (* Branch if less than zero and link *)
+    | Branch_BGEZAL (* Branch if greater than zero and link *)
+    (* MIPS II likely branches - TODO
+    | Branch_BLTZALL(* Branch if less than zero and link (likely) *)
+    | Branch_BGEZALL(* Branch if greater than zero and link *)
+    *)
+    [@@deriving enum, show]
+
 (* integer: register and register to register
  * OP rd, rs, rt
  * encoded as
- * 31   25             20              15     10      5              0
- * | op | first source | second source | dest | shift | ALU function |
+ * 31       25             20              15     10      5              0
+ * | op = 0 | first source | second source | dest | shift | ALU function |
+ *
+ * TODO: Since an R instruction requires op == 0; remove op?
  *)
 type inst_r = {
     op    : opcode;
@@ -133,6 +192,19 @@ type inst_r = {
     shamt : int;
     funct : funct;
 } [@@deriving show]
+
+(* integer: register and immediate; compare and branch
+ * OP rs, IMM
+ * encoded as
+ * 31       25       20            15                 0
+ * | op = 1 | source | branch type | immediate offset |
+ *)
+type inst_ri = {
+    op    : opcode;
+    rs    : register;
+    brnch : branch;
+    imm   : int;
+}
 
 (* integer: register and immediate to register
  * OP rt, IMM(rs)
@@ -148,7 +220,7 @@ type inst_i = {
     imm   : int;
 } [@@deriving show]
 
-(* jump
+(* integer: unconditional jump
  * OP label
  * encoded as
  * 31   25            0
@@ -163,9 +235,10 @@ type inst_j = {
  * Decoding is broken down by instruction format.
  *)
 type t =
-    | Inst_R of inst_r
-    | Inst_I of inst_i
-    | Inst_J of inst_j
+    | Inst_R  of inst_r
+    | Inst_RI of inst_ri
+    | Inst_I  of inst_i
+    | Inst_J  of inst_j
     | NYI
     [@@deriving show]
 

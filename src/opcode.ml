@@ -6,37 +6,69 @@ type register =
     | R_t8 | R_t9 | R_k0 | R_k1 | R_gp | R_sp | R_fp | R_ra
     [@@deriving enum, show]
 
+(** A MIPS opcode mnemonic *)
 type opcode =
-    (* 0x00 *)
     | Mips_ALU   (* MIPS splits arithmetic instructions into an ALU block
                   * then uses the `function` section at the end of the
                   * instruction to disambiguate.
                   *)
-    (* 0x01 is unused *)
+    | Mips_REGIM (* Likewise, register/immediate compare and branch instructions
+                  * have their own unique block.
+                  *)
     | Mips_J     (* Jump *) [@value 0x02]
     | Mips_JAL   (* Jump and Link *)
     | Mips_BEQ   (* Branch if Equal *)
     | Mips_BNE   (* Branch if Not Equal *)
     | Mips_BLEZ  (* Branch if Less Than or Equal to Zero *)
-    (* 0x07 is unused *)
-    | Mips_ADDI  (* Add Immediate *) [@value 0x08]
+    | Mips_BGTZ  (* Branch is Greater Than or Equal to Zero *)
+    | Mips_ADDI  (* Add Immediate *)
     | Mips_ADDIU (* Add Unsigned Immediate *)
     | Mips_SLTI  (* Set to 1 if Less Than Immediate *)
     | Mips_SLTIU (* Set to 1 if Less Than Unsigned Immediate *)
     | Mips_ANDI  (* Bitwise AND Immediate *)
     | Mips_ORI   (* Bitwise OR Immediate *)
-    (* 0x0E is unused *)
-    | Mips_LUI   (* Load Upper Immediate *) [@value 0x0F]
+    | Mips_XORI  (* Bitwise exclusive-OR Immediate *)
+    | Mips_LUI   (* Load Upper Immediate *)
     | Mips_MFC0  (* Move from Coprocessor 0 *)
-    (* 0x11 - 0x22 are unused *)
-    | Mips_LW    (* Load Word *) [@value 0x23]
+    (* 0x11 - 0x13 are coprocessor operations *)
+    (* MIPS II likely branches - TODO
+    | Mips_BEQL  (* Branch if Equal (likely) *)
+    | Mips_BNEL  (* Branch if Not Equal (likely) *)
+    | Mips_BLEZL (* Branch if Less Than or Equal to Zero (likely) *)
+    | Mips_BGTZL (* Branch if Greater Than or Equal to Zero (likely) *)
+    *)
+    (* MIPS III 64-bit arithmetic - TODO
+    | Mips_LDL   (* Load Doubleword Left *)
+    | Mips_LDR   (* Load Doubleword Right *)
+    *)
+    | Mips_LB    (* Load Byte *) [@value 0x20]
+    | Mips_LH    (* Load Halfword *)
+    | Mips_LWL   (* Load Word Left *)
+    | Mips_LW    (* Load Word *)
     | Mips_LBU   (* Load Byte Unsigned *)
     | Mips_LHU   (* Load Halfword Unsigned *)
-    (* 0x26 - 0x27 are unused *)
-    | Mips_SB    (* Store Byte *) [@value 0x28]
+    | Mips_LWR   (* Load Word Right *)
+    | Mips_LWU   (* Load Word Unsigned *)
+    | Mips_SB    (* Store Byte *)
     | Mips_SH    (* Store Halfword *)
-    (* 0x2A is unused *)
-    | Mips_SW    (* Store Word *) [@value 0x2B]
+    | Mips_SWL   (* Store Word Left *)
+    | Mips_SW    (* Store Word *)
+    (* MIPS III 64-bit arithmetic - TODO
+    | Mips_SDL   (* Store Doubleword Left *)
+    | Mips_SDR   (* Store Doubleword Right *)
+    *)
+    | Mips_SWR   (* Store Word Right *) [@value 0x2E]
+    (* 0x2F is CACHE *)
+    | Mips_LL    (* Load Linked *) [@value 0x30]
+    (* 0x31-0x36 are unused *)
+    (* MIPS III 64-bit arithmetic - TODO
+    | Mips_LD    (* Load Doubleword *)
+    *)
+    | Mips_SC    (* Store Conditional *) [@value 0x38]
+    (* 0x39-0x3E are unused *)
+    (* MIPS III 64-bit arithmetic - TODO
+    | Mips_SD    (* Store Doubleword *) [@value 0x3F]
+    *)
     [@@deriving enum, show]
 
 (* ALU function field; only on R type instructions *)
@@ -63,7 +95,7 @@ type funct =
     | Funct_MTHI    (* Move to HI *)
     | Funct_MFLO    (* Move from LO *)
     | Funct_MTLO    (* Move to LO *)
-    (* MIPS III - TODO
+    (* MIPS III 64-bit arithmetic - TODO
     | Funct_DSLLV   (* 64-bit shift-left logical by variable *)
     (* 0x15 is unused *)
     | Funct_DSRLV   (* 64-bit shift-right logical by variable *) [@value 0x16]
@@ -117,6 +149,32 @@ type funct =
     *)
     [@@deriving enum, show]
 
+(* Branch types for RI instructions *)
+type branch =
+    | Branch_BLTZ   (* Branch if less than zero *)
+    | Branch_BGEZ   (* Branch if greater than zero *)
+    (* MIPS II likely branches - TODO
+    | Branch_BLTZL  (* Branch if less than zero (likely) *)
+    | Branch_BGEZL  (* Branch if greater than zero (likely) *)
+    *)
+    (* 0x4-0x7 are unused *)
+    (* MIPS II conditional traps - TODO
+    | Branch_TGEI   (* Trap if greater than immediate *)
+    | Branch_TGEIU  (* Trap if greater than immediate (unsigned) *)
+    | Branch_TLTI   (* Trap if less than immediate *)
+    | Branch_TLTIU  (* Trap if less than immediate (unsigned) *)
+    | Branch_TEQI   (* Trap if equal to immediate *)
+    | Branch_TNEI   (* Trap if not equal to immediate *)
+    *)
+    (* 0xF is unused *)
+    | Branch_BLTZAL (* Branch if less than zero and link *) [@value 0x10]
+    | Branch_BGEZAL (* Branch if greater than zero and link *)
+    (* MIPS II likely branches - TODO
+    | Branch_BLTZALL(* Branch if less than zero and link (likely) *)
+    | Branch_BGEZALL(* Branch if greater than zero and link *)
+    *)
+    [@@deriving enum, show]
+
 (* integer: register and register to register
  * OP rd, rs, rt
  * encoded as
@@ -130,6 +188,19 @@ type inst_r = {
     rd    : register;
     shamt : int;
     funct : funct;
+} [@@deriving show]
+
+(* integer: register and immediate; compare and branch
+ * OP rs, IMM
+ * encoded as
+ * 31       25       20            15                 0
+ * | op = 1 | source | branch type | immediate offset |
+ *)
+type inst_ri = {
+    op    : opcode;
+    rs    : register;
+    brnch : branch;
+    imm   : int;
 } [@@deriving show]
 
 (* integer: register and immediate to register
@@ -159,6 +230,7 @@ type inst_j = {
 
 type opcode_type =
     | Optype_R  (* integer: register and register to register *)
+    | Optype_RI (* integer: register and immediate; compare and branch *)
     | Optype_I  (* integer: register and immediate to register *)
     | Optype_J  (* jump *)
     (* Not yet implemented:
@@ -167,19 +239,26 @@ type opcode_type =
     *)
 
 type t =
-    | Inst_R of inst_r
-    | Inst_I of inst_i
-    | Inst_J of inst_j
+    | Inst_R  of inst_r
+    | Inst_RI of inst_ri
+    | Inst_I  of inst_i
+    | Inst_J  of inst_j
     | NYI
     [@@deriving show]
 
 let type_of_opcode = function
-    | Mips_ALU  | Mips_MFC0 -> Some Optype_R
-    | Mips_J    | Mips_JAL  -> Some Optype_J
-    | Mips_BEQ  | Mips_BNE   | Mips_BLEZ | Mips_ADDI | Mips_ADDIU
-    | Mips_SLTI | Mips_SLTIU | Mips_ANDI | Mips_ORI  | Mips_LUI
-    | Mips_LW   | Mips_LBU   | Mips_LHU  | Mips_SB   | Mips_SH
-    | Mips_SW  -> Some Optype_I
+    | Mips_ALU   | Mips_MFC0 -> Some Optype_R
+    | Mips_REGIM             -> Some Optype_RI
+    | Mips_J     | Mips_JAL  -> Some Optype_J
+    | Mips_BEQ   | Mips_BNE   | Mips_BLEZ | Mips_BGTZ
+    | Mips_ADDI  | Mips_ADDIU
+    | Mips_SLTI  | Mips_SLTIU 
+    | Mips_ANDI  | Mips_ORI   | Mips_XORI
+    | Mips_LUI   | Mips_LB    | Mips_LH   | Mips_LWL
+    | Mips_LW    | Mips_LBU   | Mips_LHU  | Mips_LWR
+    | Mips_LWU
+    | Mips_SB    | Mips_SH    | Mips_SWL  | Mips_SW
+    | Mips_SWR   | Mips_LL    | Mips_SC  -> Some Optype_I
 
 let get_op inst =
     let open Stdint.Uint32 in
@@ -199,27 +278,39 @@ let get_rs =
 let get_rt =
     extract_register ~shift:16
 
-let decode_r inst =
+let decode_r op inst =
     let open Stdint.Uint32 in
     let (>>) = shift_right_logical in
     let (land) = logand in
     let fivebits = of_int 0x1F in
     let sixbits = of_int 0x3F in
-    (* Should this throw illegal instruction? *)
-    let funct = inst land sixbits |> to_int |> funct_of_enum |> CCOpt.get_or ~default:Funct_SLL in
+    let funct = match inst land sixbits |> to_int |> funct_of_enum with
+    | Some funct -> funct
+    | None -> raise Exception.Undefined_instruction
+    in
     let shamt = (inst >> 6) land fivebits |> to_int in
     (* The following should never fail *)
     let rd = extract_register ~shift:11 inst in
     let rt = get_rt inst in 
     let rs = get_rs inst in
-    (* But this could. *)
-    match get_op inst with
-    | Some Mips_ALU -> Inst_R { op = Mips_ALU; rs; rt; rd; shamt; funct }
-    (* This could be a bug if we reach this. *)
-    | None -> failwith "Illegal instruction: unrecognised opcode in R-type instruction"
-    | Some op -> failwith "Illegal instruction: R-type opcodes only use the ALU op"
+    Inst_R { op; rs; rt; rd; shamt; funct }
 
-let decode_i inst =
+let decode_ri op inst =
+    let open Stdint.Uint32 in
+    let (>>) = shift_right_logical in
+    let (land) = logand in
+    let fivebits = of_int 0x1F in
+    let twobytes = of_int 0xFFFF in
+    let rs = get_rs inst in
+    let brnch = (inst >> 16) land fivebits |> to_int in
+    let brnch = match branch_of_enum brnch with
+    | Some brnch -> brnch
+    | None -> raise Exception.Undefined_instruction
+    in
+    let imm = inst land twobytes |> to_int in
+    Inst_RI { op; rs; brnch; imm }
+
+let decode_i op inst =
     let open Stdint.Uint32 in
     let (land) = logand in
     let twobytes = of_int 0xFFFF in
@@ -227,49 +318,29 @@ let decode_i inst =
     let imm = inst land twobytes |> to_int in
     let rt = get_rt inst in
     let rs = get_rs inst in
-    (* But this could. *)
-    match get_op inst with
-    | Some op ->
-        begin match op with
-        | Mips_BEQ  | Mips_BNE   | Mips_BLEZ | Mips_ADDI | Mips_ADDIU
-        | Mips_SLTI | Mips_SLTIU | Mips_ANDI | Mips_ORI  | Mips_LUI
-        | Mips_LW   | Mips_LBU   | Mips_LHU  | Mips_SB   | Mips_SH
-        | Mips_SW ->
-            Inst_I { op; rs; rt; imm }
-        (* This could be a bug if we reach this. *)
-        | _ ->
-            failwith "Illegal instruction: invalid opcode in I-type instruction"
-        end
-    | None ->
-        failwith "Illegal instruction: unrecognised opcode in I-type instruction"
+    Inst_I { op; rs; rt; imm }
 
-let decode_j inst =
+let decode_j op inst =
     let open Stdint.Uint32 in
     let (land) = logand in
     let twentysixbits = of_int 0x02FFFFFF in
     (* The following should never fail *)
     let dest = inst land twentysixbits |> to_int in
-    (* But this could. *)
-    match get_op inst with
-    | Some op ->
-        begin match op with
-        | Mips_J | Mips_JAL -> 
-            Inst_J { op; dest }
-        (* This could be a bug if we reach this. *)
-        | _ ->
-            failwith "Illegal instruction: invalid opcode in J-type instruction"
-        end
-    | None ->
-        failwith "Illegal instruction: unrecognised opcode in J-type instruction"
+    Inst_J { op; dest }
 
 let decode inst =
     let open Stdint.Uint32 in
-    match CCOpt.(get_op inst >>= type_of_opcode) with
+    let op = match get_op inst with
+    | Some op -> op
+    | None -> raise Exception.Undefined_instruction
+    in
+    match type_of_opcode op with
     | Some optype ->
         begin match optype with
-        | Optype_R -> decode_r inst
-        | Optype_I -> decode_i inst
-        | Optype_J -> decode_j inst
-        (*| _ -> failwith "Opcodes with formats other than R, I and J are not yet implemented"*)
+        | Optype_R  -> decode_r  op inst
+        | Optype_RI -> decode_ri op inst
+        | Optype_I  -> decode_i  op inst
+        | Optype_J  -> decode_j  op inst
         end
-    | None -> failwith "Illegal instruction"
+    (* This should never happen *)
+    | None -> raise Exception.Undefined_instruction
