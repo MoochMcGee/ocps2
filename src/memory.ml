@@ -22,8 +22,26 @@ let create romfile =
     let gs_reg = Array1.create Int8_unsigned c_layout 0x200_0000 in
     Array1.fill gs_reg 0;
     (* Boot ROM; 4MiB *)
-    let fd = Unix.openfile romfile [Unix.O_RDONLY] 0 in
-    let rom = array1_of_genarray @@ Unix.map_file fd Int8_unsigned c_layout false [| 0x40_000 |] in
+    let rom = Array1.create Int8_unsigned c_layout 0x40_000 in
+    let ic = open_in romfile in
+    let idx = ref 0 in
+    let rom_size = 0x40_000 in
+    let size = 4096 in
+    let rec loop () =
+        let buf = Bytes.make size '\x00' in
+        let _count = input ic buf 0 size in
+        Bytes.iteri (fun i c -> int_of_char c |> Array1.set rom (!idx + i)) buf;
+        idx := !idx + size;
+        if !idx < rom_size then
+            loop ()
+        else
+            ()
+    in
+    begin try
+        loop ();
+    with End_of_file ->
+        close_in ic;
+    end;
     { main; ee_reg; gs_reg; rom }
 
 let start_of_main_memory = 0x0000_0000
@@ -36,7 +54,6 @@ let start_of_boot_rom = 0x1fc0_0000
 let end_of_boot_rom = 0x2000_0000 - 1
 
 let read' size mem location =
-    let open Bigarray in
     let (lor) = Uint32.logor in
     let (lsl) = Uint32.shift_left in
     match size with
@@ -53,6 +70,7 @@ let read' size mem location =
     | _ -> invalid_arg "Invalid size read; probably a bug"
 
 let read size mem location =
+    let location = location land 0x1fff_ffff in
     if location >= start_of_main_memory && location <= end_of_main_memory then
         read' size mem.main location
     else if location >= start_of_ee_registers && location <= end_of_ee_registers then
@@ -69,7 +87,6 @@ let read size mem location =
         failwith error
 
 let write' size mem location value =
-    let open Bigarray in
     let (lsl) = Uint32.shift_left in
     let (land) = Uint32.logand in
     let byte = Uint32.of_int 0xFF in

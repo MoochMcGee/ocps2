@@ -61,4 +61,7 @@ let test_mult () =
 let () =
     test_add ();
     test_addi ();
-    test_mult ()
+    test_mult ();
+    let mem = Memory.create "src/roms/scph10000.bin" in
+    let proc = Interpret.create () in
+    Interpret.step proc mem
