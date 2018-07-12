@@ -329,7 +329,6 @@ let decode_j op inst =
     Inst_J { op; dest }
 
 let decode inst =
-    let open Stdint.Uint32 in
     let op = match get_op inst with
     | Some op -> op
     | None -> raise Exception.Undefined_instruction

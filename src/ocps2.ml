@@ -1,4 +1,3 @@
-open Memory
 open Stdint
 
 let test_add () =

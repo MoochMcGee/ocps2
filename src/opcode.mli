@@ -204,7 +204,7 @@ type inst_ri = {
     rs    : register;
     brnch : branch;
     imm   : int;
-}
+} [@@deriving show]
 
 (* integer: register and immediate to register
  * OP rt, IMM(rs)

@@ -10,7 +10,7 @@ type t = {
 }
 
 (** Initialise the main memory of a PlayStation 2. *)
-val create : unit -> t
+val create : string -> t
 
 (** [read size mem location] reads [size] bytes from [mem] at [location] after
  * memory address translation. Raises Invalid_argument if [size] is not

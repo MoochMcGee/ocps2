@@ -9,7 +9,7 @@ type t = {
     rom    : bytearray; (* 4MiB *)
 }
 
-let create () =
+let create romfile =
     let open Bigarray in
     (* I chunk the memory map into separate sections to reduce usage *)
     (* Main memory; 256MiB *)
@@ -22,8 +22,8 @@ let create () =
     let gs_reg = Array1.create Int8_unsigned c_layout 0x200_0000 in
     Array1.fill gs_reg 0;
     (* Boot ROM; 4MiB *)
-    let rom = Array1.create Int8_unsigned c_layout 0x40_0000 in
-    Array1.fill rom 0;
+    let fd = Unix.openfile romfile [Unix.O_RDONLY] 0 in
+    let rom = array1_of_genarray @@ Unix.map_file fd Int8_unsigned c_layout false [| 0x40_000 |] in
     { main; ee_reg; gs_reg; rom }
 
 let start_of_main_memory = 0x0000_0000
