@@ -29,17 +29,26 @@ type opcode =
     | Mips_ORI   (* Bitwise OR Immediate *)
     | Mips_XORI  (* Bitwise exclusive-OR Immediate *)
     | Mips_LUI   (* Load Upper Immediate *)
-    | Mips_MFC0  (* Move from Coprocessor 0 *)
-    (* 0x11 - 0x13 are coprocessor operations *)
+    | Mips_COP0  (* Coprocessor 0 operations *)
+    (* 0x11 - 0x13 are coprocessor operations too
+    | Mips_FPU   (* Coprocessor 1 (or FPU) operations *)
+    | Mips_VU0   (* Coprocessor 2 (or VU0) operations *)
+    *)
     (* MIPS II likely branches - TODO
-    | Mips_BEQL  (* Branch if Equal (likely) *)
+    | Mips_BEQL  (* Branch if Equal (likely) *) [@value 0x14]
     | Mips_BNEL  (* Branch if Not Equal (likely) *)
     | Mips_BLEZL (* Branch if Less Than or Equal to Zero (likely) *)
     | Mips_BGTZL (* Branch if Greater Than or Equal to Zero (likely) *)
     *)
     (* MIPS III 64-bit arithmetic - TODO
+    | Mips_DADDI (* Doubleword Add Immediate *) [@value 0x18]
+    | Mips_DADDIU(* Doubleword Add Unsigned Immediate *)
     | Mips_LDL   (* Load Doubleword Left *)
     | Mips_LDR   (* Load Doubleword Right *)
+    *)
+    (* MIPS III 64-bit arithmetic - TODO
+    | Mips_LQ    (* Load Quadword *) [@value 0x1e]
+    | Mips_SQ    (* Store Quadword *)
     *)
     | Mips_LB    (* Load Byte *) [@value 0x20]
     | Mips_LH    (* Load Halfword *)
@@ -59,13 +68,15 @@ type opcode =
     *)
     | Mips_SWR   (* Store Word Right *) [@value 0x2E]
     (* 0x2F is CACHE *)
-    | Mips_LL    (* Load Linked *) [@value 0x30]
-    (* 0x31-0x36 are unused *)
+    (* 0x30-0x36 are unused *)
     (* MIPS III 64-bit arithmetic - TODO
-    | Mips_LD    (* Load Doubleword *)
+    | Mips_LD    (* Load Doubleword *) [@value 0x37]
     *)
-    | Mips_SC    (* Store Conditional *) [@value 0x38]
-    (* 0x39-0x3E are unused *)
+    (* 0x38 is unused *)
+    (* MIPS Coprocessor support - TODO
+    | Mips_SWC1  (* Store Word COP1 *) [@value 0x39]
+    *)
+    (* 0x3A-0x3E are unused *)
     (* MIPS III 64-bit arithmetic - TODO
     | Mips_SD    (* Store Doubleword *) [@value 0x3F]
     *)
@@ -74,21 +85,20 @@ type opcode =
 (* ALU function field; only on R type instructions *)
 type funct =
     | Funct_SLL     (* Shift-left logical *)
-    (* 0x01 is MOVCI *)
+    (* 0x01 is unused *)
     | Funct_SRL     (* Shift-right logical *) [@value 0x02]
     | Funct_SRA     (* Shift-right arithmetic *)
     | Funct_SLLV    (* Shift-left logical by variable *)
-    (* 0x05 is reserved *)
+    (* 0x05 is unused *)
     | Funct_SRLV    (* Shift-right logical by variable *) [@value 0x06]
     | Funct_SRAV    (* Shift-right arithmetic by variable *)
     | Funct_JR      (* Jump register *)
     | Funct_JALR    (* Jump and link register *)
-    (* 0x0A is MIPS IV MOVZ
-     * 0x0B is MIPS IV MOVN
-     *)
-    | Funct_SYSCALL (* System call *) [@value 0x0C]
+    | Funct_MOVZ    (* Move if Zero *)
+    | Funct_MOVN    (* Move if Not Zero *)
+    | Funct_SYSCALL (* System call *)
     | Funct_BREAK   (* Return from system call *)
-    (* 0x0E is reserved
+    (* 0x0E is unused
      * 0x0F is SYNC
      *)
     | Funct_MFHI    (* Move from HI *) [@value 0x10]
@@ -105,12 +115,6 @@ type funct =
     | Funct_MULTU   (* Multiply unsigned *)
     | Funct_DIV     (* Divide *)
     | Funct_DIVU    (* Divide unsigned *)
-    (* MIPS III 64-bit arithmetic - TODO
-    | Funct_DMULT   (* 64-bit multiply *)
-    | Funct_DMULTU  (* 64-bit multiply unsigned *)
-    | Funct_DDIV    (* 64-bit divide *)
-    | Funct_DDIVU   (* 64-bit divide unsigned *)
-    *)
     | Funct_ADD     (* Addition *) [@value 0x20]
     | Funct_ADDU    (* Unsigned addition *)
     | Funct_SUB     (* Subtraction *)
@@ -119,7 +123,7 @@ type funct =
     | Funct_OR      (* Logical OR *)
     | Funct_XOR     (* Logical XOR *)
     | Funct_NOR     (* Logical NOR *)
-    (* 0x28 and 0x29 are reserved *)
+    (* 0x28 and 0x29 are unused *)
     | Funct_SLT     (* Set if less than (signed) *) [@value 0x2A]
     | Funct_SLTU    (* Set if less than (unsigned) *)
     | Funct_DADD    (* 64-bit addition *)
@@ -247,7 +251,7 @@ type t =
     [@@deriving show]
 
 let type_of_opcode = function
-    | Mips_ALU   | Mips_MFC0 -> Some Optype_R
+    | Mips_ALU   | Mips_COP0 -> Some Optype_R
     | Mips_REGIM             -> Some Optype_RI
     | Mips_J     | Mips_JAL  -> Some Optype_J
     | Mips_BEQ   | Mips_BNE   | Mips_BLEZ | Mips_BGTZ
@@ -258,7 +262,7 @@ let type_of_opcode = function
     | Mips_LW    | Mips_LBU   | Mips_LHU  | Mips_LWR
     | Mips_LWU
     | Mips_SB    | Mips_SH    | Mips_SWL  | Mips_SW
-    | Mips_SWR   | Mips_LL    | Mips_SC  -> Some Optype_I
+    | Mips_SWR -> Some Optype_I
 
 let get_op inst =
     let open Stdint.Uint32 in
