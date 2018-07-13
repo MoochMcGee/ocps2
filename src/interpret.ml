@@ -1,11 +1,14 @@
 open Stdint
 
 let create () =
-    let reg = Array.make 32 Int32.zero in
-    let pc = ref @@ Uint32.of_string "0xbfc00000" in
-    let hi = ref Int32.zero in
-    let lo = ref Int32.zero in
-    let (proc : Processor.t) = { reg; pc; hi; lo } in
+    let reg   = Array.make 32 Int32.zero in
+    let reghi = Array.make 32 Int32.zero in
+    let pc    = ref @@ Uint32.of_string "0xbfc00000" in
+    let hi    = ref Int32.zero in
+    let hi1   = ref Int32.zero in
+    let lo    = ref Int32.zero in
+    let lo1   = ref Int32.zero in
+    let (proc : Processor.t) = { reg; reghi; pc; hi; hi1; lo; lo1 } in
     proc
 
 let execute_r proc inst = function
